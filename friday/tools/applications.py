@@ -1,13 +1,41 @@
 """Safe macOS application controls."""
 import platform
 import subprocess
+import logging
+from friday.config import config
 
 
-def open_application(name: str) -> str:
+logger = logging.getLogger("friday.tools")
+
+ALIASES = {
+    "vs code": "Visual Studio Code",
+    "vscode": "Visual Studio Code",
+    "code": "Visual Studio Code",
+    "chrome": "Google Chrome",
+}
+
+
+def _application_name(name: str) -> str:
+    cleaned = " ".join(name.strip().split())
+    return ALIASES.get(cleaned.casefold(), cleaned)
+
+
+def open_application(name: str) -> dict:
+    requested = name
+    application = _application_name(name)
+    if config.debug_tools:
+        logger.info("[TOOL CALL] open_application Arguments: %s", {"name": requested})
     if platform.system() != "Darwin":
-        return "Application control is currently supported on macOS only."
-    result = subprocess.run(["open", "-a", name], capture_output=True, text=True)
-    return f"Opened {name}." if result.returncode == 0 else f"I couldn't open {name}: {result.stderr.strip()}"
+        result = {"success": False, "message": "Application control is currently supported on macOS only.", "application": requested}
+    else:
+        completed = subprocess.run(["open", "-a", application], capture_output=True, text=True)
+        if completed.returncode == 0:
+            result = {"success": True, "message": f"Opened {application}", "application": application}
+        else:
+            result = {"success": False, "message": "Application not found", "application": requested, "error": completed.stderr.strip()}
+    if config.debug_tools:
+        logger.info("[TOOL RESULT] open_application %s", result)
+    return result
 
 
 def close_application(name: str) -> str:

@@ -73,6 +73,14 @@ uv run --extra voice agent_friday.py voice-input
 
 It records until a short silence, transcribes locally, and sends the text through the existing FRIDAY/Ollama/tool path. Text responses are printed; TTS is intentionally not included in this phase. Press Ctrl-C to exit.
 
+For tool-call diagnostics, enable `DEBUG_TOOLS=true` in `.env` or inline:
+
+```bash
+DEBUG_TOOLS=true uv run agent_friday.py console
+```
+
+This logs the model-selected tool, arguments, actual tool result, and final response generation. Live system questions are never answered from model knowledge; if Ollama declines a tool call, FRIDAY uses a deterministic safety fallback and still supplies the real tool result.
+
 If macOS denies input, enable Terminal under System Settings → Privacy & Security → Microphone. The recorder uses 16 kHz mono audio, `base.en`, CPU `int8` inference, and a small energy-based silence detector for a reliable Apple Silicon baseline.
 
 ## Safety

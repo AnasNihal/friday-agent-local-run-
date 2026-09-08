@@ -22,6 +22,7 @@ class Config:
     mcp_server_port: int = int(os.getenv("MCP_SERVER_PORT", "8000"))
     memory_dir: str = os.getenv("FRIDAY_MEMORY_DIR", "memory")
     debug: bool = _bool("DEBUG")
+    debug_tools: bool = _bool("DEBUG_TOOLS")
 
 
 config = Config()

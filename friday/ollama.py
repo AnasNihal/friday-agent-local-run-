@@ -38,11 +38,17 @@ def check_ready() -> tuple[bool, str]:
         return False, "Ollama is not running. Start it with: ollama serve"
 
 
-def chat(messages: Iterable[dict[str, str]], *, stream: bool = False) -> str:
-    payload: dict[str, Any] = {"model": config.ollama_model, "messages": list(messages), "stream": stream, "options": {"temperature": 0.4}}
+def chat_message(messages: Iterable[dict[str, Any]], *, tools: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    payload: dict[str, Any] = {"model": config.ollama_model, "messages": list(messages), "stream": False, "options": {"temperature": 0.4}}
+    if tools:
+        payload["tools"] = tools
     try:
         response = httpx.post(f"{config.ollama_base_url}/api/chat", json=payload, timeout=180)
         response.raise_for_status()
-        return response.json()["message"]["content"].strip()
+        return response.json()["message"]
     except Exception as exc:
         raise _error(exc) from exc
+
+
+def chat(messages: Iterable[dict[str, str]], *, stream: bool = False) -> str:
+    return str(chat_message(messages)["content"]).strip()

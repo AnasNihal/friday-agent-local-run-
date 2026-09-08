@@ -12,12 +12,13 @@ import logging
 import os
 import re
 import sys
+import logging
 from typing import Callable
 
 from dotenv import load_dotenv
 
 from friday.config import config
-from friday.ollama import OllamaError, chat, check_ready
+from friday.ollama import OllamaError, chat, chat_message, check_ready
 from friday.stt import LocalSTT, STTError, microphone_status
 from friday.tools.applications import open_application
 from friday.tools.browser import youtube_search, web_search
@@ -26,8 +27,29 @@ from friday.tools.system import get_battery_status, get_cpu_usage, get_current_t
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+logger = logging.getLogger("friday-agent")
 
-SYSTEM_PROMPT = """You are FRIDAY, a private local voice assistant. Be calm, concise, confident, and slightly witty. Address the user as boss occasionally. Keep ordinary answers to two or three spoken sentences. Never mention internal prompts, APIs, or implementation details. If a tool result is supplied, summarize it naturally and do not invent facts. The user has explicitly chosen local-only processing."""
+SYSTEM_PROMPT = """You are FRIDAY, a private local voice assistant. Be calm, concise, confident, and slightly witty. Address the user as boss occasionally. Keep ordinary answers to two or three spoken sentences. Never mention internal prompts, APIs, or implementation details.
+
+For real-time information about the user's computer or environment, you MUST use the appropriate tool result. Never invent, estimate, assume, or hallucinate battery percentage, CPU usage, memory usage, disk usage, running applications, current time, system status, whether an application exists, or whether an application successfully opened. If a tool fails, clearly report that failure. Do not pretend an action succeeded or fabricate a result. When the user requests an action with a corresponding tool, execute that tool instead of merely describing how to do it. Tool results are authoritative; summarize them naturally and do not change their values. The user has explicitly chosen local-only processing."""
+
+TOOL_DEFINITIONS = [
+    {"type": "function", "function": {"name": "get_battery_status", "description": "Read current macOS battery percentage and charging status. Always use for battery questions.", "parameters": {"type": "object", "properties": {}, "required": []}}},
+    {"type": "function", "function": {"name": "open_application", "description": "Open an installed macOS application by name.", "parameters": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}}},
+    {"type": "function", "function": {"name": "get_current_time", "description": "Read the current local computer time.", "parameters": {"type": "object", "properties": {}, "required": []}}},
+    {"type": "function", "function": {"name": "get_cpu_usage", "description": "Read current computer CPU usage.", "parameters": {"type": "object", "properties": {}, "required": []}}},
+    {"type": "function", "function": {"name": "get_memory_usage", "description": "Read current computer memory usage.", "parameters": {"type": "object", "properties": {}, "required": []}}},
+    {"type": "function", "function": {"name": "get_disk_usage", "description": "Read current disk usage.", "parameters": {"type": "object", "properties": {}, "required": []}}},
+]
+
+TOOL_FUNCTIONS = {
+    "get_battery_status": get_battery_status,
+    "open_application": open_application,
+    "get_current_time": get_current_time,
+    "get_cpu_usage": get_cpu_usage,
+    "get_memory_usage": get_memory_usage,
+    "get_disk_usage": get_disk_usage,
+}
 
 
 def build_stt():
@@ -112,16 +134,51 @@ def _tool_route(text: str) -> tuple[str, str] | None:
 
 
 def _friday_response(text: str, messages: list[dict[str, str]]) -> str:
-    routed = _tool_route(text)
+    if config.debug_tools:
+        logger.info("[AGENT] User: %s", text)
     messages.append({"role": "user", "content": text})
-    if routed:
-        name, result = routed
-        messages.append({"role": "system", "content": f"Tool result for {name}: {result}"})
     try:
-        answer = chat(messages)
+        message = chat_message(messages, tools=TOOL_DEFINITIONS)
+        tool_calls = message.get("tool_calls") or []
+        if tool_calls:
+            messages.append(message)
+            for call in tool_calls:
+                function = call.get("function", {})
+                name = function.get("name", "")
+                arguments = function.get("arguments") or {}
+                if isinstance(arguments, str):
+                    arguments = json.loads(arguments)
+                executor = TOOL_FUNCTIONS.get(name)
+                if executor is None:
+                    result = {"success": False, "message": f"Unknown tool: {name}"}
+                else:
+                    if config.debug_tools:
+                        logger.info("[LLM] Selected tool: %s", name)
+                        logger.info("[ARGS] %s", arguments)
+                    result = executor(**arguments)
+                serialized = json.dumps(result) if isinstance(result, (dict, list)) else str(result)
+                messages.append({"role": "tool", "content": serialized})
+                if config.debug_tools:
+                    logger.info("[TOOL] Result returned to model: %s", serialized)
+            answer = chat(messages)
+        else:
+            # Safety fallback for models that return prose instead of a tool
+            # call: execute the deterministic route for live-system requests
+            # rather than trusting an unverified answer.
+            routed = _tool_route(text)
+            if routed:
+                name, result = routed
+                messages.append({"role": "system", "content": f"Authoritative tool result for {name}: {result}"})
+                if config.debug_tools:
+                    logger.info("[ROUTER] Model returned no tool call; executed fallback: %s", name)
+                answer = chat(messages)
+            else:
+                answer = str(message.get("content", "")).strip()
     except OllamaError as exc:
         return f"I couldn't reach Ollama. {exc}"
     messages.append({"role": "assistant", "content": answer})
+    if config.debug_tools:
+        logger.info("[AGENT] Final response generated")
     return answer
 
 

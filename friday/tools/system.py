@@ -6,14 +6,41 @@ import datetime
 import platform
 import shutil
 import subprocess
+import re
+import logging
+from friday.config import config
 
 
-def get_battery_status() -> dict | str:
+logger = logging.getLogger("friday.tools")
+
+
+def _parse_battery_output(output: str) -> dict:
+    match = re.search(r"(?P<percentage>\d{1,3})%;\s*(?P<status>[A-Za-z -]+);", output)
+    if not match:
+        return {"success": False, "message": "Could not parse battery status from pmset output", "raw": output.strip()}
+    return {
+        "success": True,
+        "percentage": int(match.group("percentage")),
+        "status": match.group("status").strip().lower(),
+    }
+
+
+def get_battery_status() -> dict:
+    if config.debug_tools:
+        logger.info("[TOOL CALL] get_battery_status Arguments: {}")
     if platform.system() != "Darwin":
-        return "Battery status is currently supported on macOS only."
-    result = subprocess.run(["pmset", "-g", "batt"], capture_output=True, text=True)
-    line = result.stdout.splitlines()[-1] if result.stdout.splitlines() else ""
-    return {"raw": line, "charging": "AC Power" in result.stdout}
+        result = {"success": False, "message": "Battery status is currently supported on macOS only."}
+    else:
+        completed = subprocess.run(["pmset", "-g", "batt"], capture_output=True, text=True)
+        output = completed.stdout
+        result = _parse_battery_output(output) if completed.returncode == 0 else {
+            "success": False,
+            "message": "Could not read battery status from pmset",
+            "raw": output.strip(),
+        }
+    if config.debug_tools:
+        logger.info("[TOOL RESULT] get_battery_status %s", result)
+    return result
 
 
 def get_cpu_usage() -> str:
