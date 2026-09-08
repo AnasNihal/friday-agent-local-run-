@@ -83,6 +83,29 @@ This logs the model-selected tool, arguments, actual tool result, and final resp
 
 If macOS denies input, enable Terminal under System Settings → Privacy & Security → Microphone. The recorder uses 16 kHz mono audio, `base.en`, CPU `int8` inference, and a small energy-based silence detector for a reliable Apple Silicon baseline.
 
+## World Intelligence
+
+FRIDAY can retrieve live world headlines without an API key:
+
+```text
+What's happening around the world?
+Give me today's world news.
+Open the world monitor.
+What are the latest technology headlines?
+```
+
+World news is aggregated from BBC World, Al Jazeera, NPR World, and Google News RSS. Sources can fail independently; the result reports which feeds succeeded and only includes retrieved headlines. Internet access is required for current news.
+
+The default monitor is `https://worldmonitor.app/`, configurable with `WORLD_MONITOR_URL`. It opens in the system default browser. `search_browser` opens an encoded Google search, while `search_web` retrieves public Google News RSS results without scraping Google HTML.
+
+To inspect multi-tool orchestration:
+
+```bash
+DEBUG_TOOLS=true uv run agent_friday.py console
+```
+
+The loop is capped by `MAX_TOOL_ITERATIONS` (default `5`) and supports sequences such as `get_world_news` → `open_world_monitor` → final briefing.
+
 ## Safety
 
 Tools are read-only or reversible by default. There is no delete-file tool, no arbitrary shell tool, and no automatic software installation. URLs are restricted to HTTP(S), and local notes/profile data are only written when explicitly requested.

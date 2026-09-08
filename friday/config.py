@@ -20,6 +20,8 @@ class Config:
     tts_provider: str = os.getenv("TTS_PROVIDER", "piper")
     tts_voice: str = os.getenv("TTS_VOICE", "en_US-lessac-medium")
     mcp_server_port: int = int(os.getenv("MCP_SERVER_PORT", "8000"))
+    world_monitor_url: str = os.getenv("WORLD_MONITOR_URL", "https://worldmonitor.app/")
+    max_tool_iterations: int = int(os.getenv("MAX_TOOL_ITERATIONS", "5"))
     memory_dir: str = os.getenv("FRIDAY_MEMORY_DIR", "memory")
     debug: bool = _bool("DEBUG")
     debug_tools: bool = _bool("DEBUG_TOOLS")

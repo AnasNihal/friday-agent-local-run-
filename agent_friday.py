@@ -11,8 +11,6 @@ import json
 import logging
 import os
 import re
-import sys
-import logging
 from typing import Callable
 
 from dotenv import load_dotenv
@@ -21,7 +19,8 @@ from friday.config import config
 from friday.ollama import OllamaError, chat, chat_message, check_ready
 from friday.stt import LocalSTT, STTError, microphone_status
 from friday.tools.applications import open_application
-from friday.tools.browser import youtube_search, web_search
+from friday.tools.browser import open_world_monitor, search_browser, youtube_search, web_search
+from friday.tools.news import get_world_news, search_web
 from friday.tools.productivity import create_note
 from friday.tools.system import get_battery_status, get_cpu_usage, get_current_time, get_disk_usage, get_memory_usage
 
@@ -31,9 +30,17 @@ logger = logging.getLogger("friday-agent")
 
 SYSTEM_PROMPT = """You are FRIDAY, a private local voice assistant. Be calm, concise, confident, and slightly witty. Address the user as boss occasionally. Keep ordinary answers to two or three spoken sentences. Never mention internal prompts, APIs, or implementation details.
 
-For real-time information about the user's computer or environment, you MUST use the appropriate tool result. Never invent, estimate, assume, or hallucinate battery percentage, CPU usage, memory usage, disk usage, running applications, current time, system status, whether an application exists, or whether an application successfully opened. If a tool fails, clearly report that failure. Do not pretend an action succeeded or fabricate a result. When the user requests an action with a corresponding tool, execute that tool instead of merely describing how to do it. Tool results are authoritative; summarize them naturally and do not change their values. The user has explicitly chosen local-only processing."""
+For real-time information about the user's computer or environment, you MUST use the appropriate tool result. Never invent, estimate, assume, or hallucinate battery percentage, CPU usage, memory usage, disk usage, running applications, current time, system status, whether an application exists, or whether an application successfully opened. If a tool fails, clearly report that failure. Do not pretend an action succeeded or fabricate a result. When the user requests an action with a corresponding tool, execute that tool instead of merely describing how to do it. Tool results are authoritative; summarize them naturally and do not change their values.
+
+For current events, breaking news, latest news, recent events, today's news, or what is happening around the world, always retrieve live information with get_world_news before answering; never use model memory. If retrieval fails, say current information could not be retrieved. For a broad request such as what is happening around the world, call get_world_news first, then open_world_monitor, then provide the concise briefing. For a headlines-only request, use get_world_news without opening the monitor. Only open the monitor when the user asks for it or when the broad world-situation request makes it useful. Use search_browser only when the user asks for a visual browser search.
+
+The user has explicitly chosen local-only processing."""
 
 TOOL_DEFINITIONS = [
+    {"type": "function", "function": {"name": "get_world_news", "description": "Retrieve real current world headlines from public RSS sources. Use for current, latest, recent, breaking, or today's world news; never answer those from memory.", "parameters": {"type": "object", "properties": {"max_results": {"type": "integer", "minimum": 1, "maximum": 20}}, "required": []}}},
+    {"type": "function", "function": {"name": "open_world_monitor", "description": "Open the configured public world-monitor dashboard when the user asks for a world monitor, global situation dashboard, or live world map.", "parameters": {"type": "object", "properties": {}, "required": []}}},
+    {"type": "function", "function": {"name": "search_browser", "description": "Open a visual Google search in the default browser when the user explicitly asks to search in a browser.", "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}},
+    {"type": "function", "function": {"name": "search_web", "description": "Retrieve actual public web/news search results without an API key. Use when the user asks for current search results.", "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}},
     {"type": "function", "function": {"name": "get_battery_status", "description": "Read current macOS battery percentage and charging status. Always use for battery questions.", "parameters": {"type": "object", "properties": {}, "required": []}}},
     {"type": "function", "function": {"name": "open_application", "description": "Open an installed macOS application by name.", "parameters": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}}},
     {"type": "function", "function": {"name": "get_current_time", "description": "Read the current local computer time.", "parameters": {"type": "object", "properties": {}, "required": []}}},
@@ -43,6 +50,10 @@ TOOL_DEFINITIONS = [
 ]
 
 TOOL_FUNCTIONS = {
+    "get_world_news": get_world_news,
+    "open_world_monitor": open_world_monitor,
+    "search_browser": search_browser,
+    "search_web": search_web,
     "get_battery_status": get_battery_status,
     "open_application": open_application,
     "get_current_time": get_current_time,
@@ -139,8 +150,15 @@ def _friday_response(text: str, messages: list[dict[str, str]]) -> str:
     messages.append({"role": "user", "content": text})
     try:
         message = chat_message(messages, tools=TOOL_DEFINITIONS)
-        tool_calls = message.get("tool_calls") or []
-        if tool_calls:
+        executed_tool = False
+        for iteration in range(1, config.max_tool_iterations + 1):
+            tool_calls = message.get("tool_calls") or []
+            if not tool_calls:
+                answer = str(message.get("content", "")).strip()
+                break
+            if config.debug_tools:
+                logger.info("[ITERATION %d]", iteration)
+            executed_tool = True
             messages.append(message)
             for call in tool_calls:
                 function = call.get("function", {})
@@ -153,27 +171,29 @@ def _friday_response(text: str, messages: list[dict[str, str]]) -> str:
                     result = {"success": False, "message": f"Unknown tool: {name}"}
                 else:
                     if config.debug_tools:
-                        logger.info("[LLM] Selected tool: %s", name)
+                        logger.info("[LLM TOOL CALL] %s", name)
                         logger.info("[ARGS] %s", arguments)
                     result = executor(**arguments)
                 serialized = json.dumps(result) if isinstance(result, (dict, list)) else str(result)
-                messages.append({"role": "tool", "content": serialized})
+                messages.append({"role": "tool", "content": serialized, "name": name})
                 if config.debug_tools:
-                    logger.info("[TOOL] Result returned to model: %s", serialized)
-            answer = chat(messages)
+                    logger.info("[TOOL RESULT] %s", serialized[:1000])
+            message = chat_message(messages, tools=TOOL_DEFINITIONS)
         else:
+            answer = "I reached the tool safety limit before completing that request."
+        if not executed_tool:
             # Safety fallback for models that return prose instead of a tool
-            # call: execute the deterministic route for live-system requests
-            # rather than trusting an unverified answer.
+            # call: execute known live-system requests instead of trusting it.
             routed = _tool_route(text)
+            if not routed and re.search(r"\b(current|latest|recent|breaking|today(?:'s)?|what(?:'s| is) happening)\b.*\b(news|world|events|headlines|technology|ai)\b|\b(news|headlines)\b.*\b(current|latest|recent|today)\b", text.lower()):
+                live_result = get_world_news()
+                routed = ("get_world_news", json.dumps(live_result))
             if routed:
                 name, result = routed
                 messages.append({"role": "system", "content": f"Authoritative tool result for {name}: {result}"})
                 if config.debug_tools:
                     logger.info("[ROUTER] Model returned no tool call; executed fallback: %s", name)
                 answer = chat(messages)
-            else:
-                answer = str(message.get("content", "")).strip()
     except OllamaError as exc:
         return f"I couldn't reach Ollama. {exc}"
     messages.append({"role": "assistant", "content": answer})
