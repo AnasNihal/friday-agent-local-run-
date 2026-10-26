@@ -54,7 +54,7 @@ def parse_feed(content: bytes, source: str) -> list[dict[str, Any]]:
     root = ET.fromstring(content)
     entries = root.findall(".//item") or root.findall(".//{http://www.w3.org/2005/Atom}entry")
     results: list[dict[str, Any]] = []
-    for entry in entries:
+    for entry in entries[:100]:
         title = _clean(entry.findtext("title") or entry.findtext("{http://www.w3.org/2005/Atom}title"))
         link = entry.findtext("link") or ""
         if not link:
@@ -96,6 +96,8 @@ def _deduplicate(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def get_world_news(max_results: int = 8) -> dict[str, Any]:
     """Retrieve current world headlines from multiple public RSS feeds."""
+    if not isinstance(max_results, int):
+        return {"success": False, "message": "max_results must be an integer", "headlines": [], "sources": []}
     articles: list[dict[str, Any]] = []
     sources: list[dict[str, Any]] = []
     with ThreadPoolExecutor(max_workers=len(WORLD_NEWS_FEEDS)) as executor:
@@ -115,6 +117,8 @@ def get_world_news(max_results: int = 8) -> dict[str, Any]:
 
 def search_web(query: str, max_results: int = 6) -> dict[str, Any]:
     """Search public Google News RSS results without scraping Google HTML."""
+    if not isinstance(max_results, int):
+        return {"success": False, "query": query, "results": [], "error": "max_results must be an integer"}
     encoded = quote_plus(query.strip())
     source, entries, error = _fetch_feed("Google News", f"https://news.google.com/rss/search?q={encoded}&hl=en-US&gl=US&ceid=US:en")
     results = _deduplicate(entries)[: max(1, min(max_results, 20))]
