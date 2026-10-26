@@ -2,14 +2,16 @@
 
 import webbrowser
 import httpx
+from friday.tools.browser import _validated_url
 
 
 def fetch_url(url: str) -> str:
     """Fetch a small text preview from an explicitly supplied HTTP(S) URL."""
-    if not url.startswith(("http://", "https://")):
+    validated = _validated_url(url)
+    if not validated:
         return "For safety, only HTTP(S) URLs can be fetched."
     try:
-        response = httpx.get(url, follow_redirects=True, timeout=10)
+        response = httpx.get(validated, follow_redirects=True, timeout=10)
         response.raise_for_status()
         return response.text[:4000]
     except Exception as exc:
