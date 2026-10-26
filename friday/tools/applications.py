@@ -28,7 +28,10 @@ def open_application(name: str) -> dict:
     if platform.system() != "Darwin":
         result = {"success": False, "message": "Application control is currently supported on macOS only.", "application": requested}
     else:
-        completed = subprocess.run(["open", "-a", application], capture_output=True, text=True)
+        try:
+            completed = subprocess.run(["open", "-a", application], capture_output=True, text=True, timeout=15)
+        except (OSError, subprocess.TimeoutExpired):
+            return {"success": False, "message": "Could not start the application opener.", "application": requested}
         if completed.returncode == 0:
             result = {"success": True, "message": f"Opened {application}", "application": application}
         else:
@@ -41,8 +44,15 @@ def open_application(name: str) -> dict:
 def close_application(name: str) -> str:
     if platform.system() != "Darwin":
         return "Application control is currently supported on macOS only."
-    result = subprocess.run(["osascript", "-e", f'tell application {name!r} to quit'], capture_output=True, text=True)
-    return f"Closed {name}." if result.returncode == 0 else f"I couldn't close {name}."
+    cleaned = " ".join(name.strip().split())
+    if not cleaned:
+        return "Please provide an application name."
+    escaped = cleaned.replace("\\", "\\\\").replace('"', '\\"')
+    try:
+        result = subprocess.run(["osascript", "-e", f'tell application "{escaped}" to quit'], capture_output=True, text=True, timeout=15)
+    except (OSError, subprocess.TimeoutExpired):
+        return f"I couldn't close {cleaned}."
+    return f"Closed {cleaned}." if result.returncode == 0 else f"I couldn't close {cleaned}."
 
 
 def list_running_applications() -> list[str]:
