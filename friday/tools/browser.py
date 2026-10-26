@@ -6,8 +6,17 @@ from friday.config import config
 
 
 def _validated_url(url: str) -> str | None:
-    parsed = urlparse(url.strip())
-    return url.strip() if parsed.scheme in {"http", "https"} and parsed.netloc else None
+    cleaned = url.strip()
+    if any(ord(char) < 32 for char in cleaned):
+        return None
+    try:
+        parsed = urlparse(cleaned)
+        valid_host = bool(parsed.hostname) and parsed.username is None and parsed.password is None
+        # Accessing .port also rejects malformed port values.
+        _ = parsed.port
+    except ValueError:
+        return None
+    return cleaned if parsed.scheme.lower() in {"http", "https"} and valid_host else None
 
 
 def open_url(url: str) -> str:
