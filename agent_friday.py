@@ -165,15 +165,23 @@ def _friday_response(text: str, messages: list[dict[str, str]]) -> str:
                 name = function.get("name", "")
                 arguments = function.get("arguments") or {}
                 if isinstance(arguments, str):
-                    arguments = json.loads(arguments)
+                    try:
+                        arguments = json.loads(arguments)
+                    except json.JSONDecodeError:
+                        arguments = None
                 executor = TOOL_FUNCTIONS.get(name)
-                if executor is None:
+                if not isinstance(arguments, dict):
+                    result = {"success": False, "message": "Tool arguments must be a valid JSON object."}
+                elif executor is None:
                     result = {"success": False, "message": f"Unknown tool: {name}"}
                 else:
                     if config.debug_tools:
                         logger.info("[LLM TOOL CALL] %s", name)
                         logger.info("[ARGS] %s", arguments)
-                    result = executor(**arguments)
+                    try:
+                        result = executor(**arguments)
+                    except (TypeError, ValueError) as exc:
+                        result = {"success": False, "message": f"Invalid arguments for {name}: {exc}"}
                 serialized = json.dumps(result) if isinstance(result, (dict, list)) else str(result)
                 messages.append({"role": "tool", "content": serialized, "name": name})
                 if config.debug_tools:
