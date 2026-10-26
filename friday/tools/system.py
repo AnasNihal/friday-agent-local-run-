@@ -31,7 +31,10 @@ def get_battery_status() -> dict:
     if platform.system() != "Darwin":
         result = {"success": False, "message": "Battery status is currently supported on macOS only."}
     else:
-        completed = subprocess.run(["pmset", "-g", "batt"], capture_output=True, text=True)
+        try:
+            completed = subprocess.run(["pmset", "-g", "batt"], capture_output=True, text=True, timeout=5)
+        except (OSError, subprocess.TimeoutExpired):
+            return {"success": False, "message": "Could not read battery status from pmset."}
         output = completed.stdout
         result = _parse_battery_output(output) if completed.returncode == 0 else {
             "success": False,
@@ -45,7 +48,10 @@ def get_battery_status() -> dict:
 
 def get_cpu_usage() -> str:
     if platform.system() == "Darwin":
-        result = subprocess.run(["top", "-l", "1", "-n", "0"], capture_output=True, text=True)
+        try:
+            result = subprocess.run(["top", "-l", "1", "-n", "0"], capture_output=True, text=True, timeout=10)
+        except (OSError, subprocess.TimeoutExpired):
+            return "CPU usage unavailable."
         for line in result.stdout.splitlines():
             if "CPU usage" in line:
                 return line.strip()
@@ -54,7 +60,10 @@ def get_cpu_usage() -> str:
 
 def get_memory_usage() -> str:
     if platform.system() == "Darwin":
-        result = subprocess.run(["vm_stat"], capture_output=True, text=True)
+        try:
+            result = subprocess.run(["vm_stat"], capture_output=True, text=True, timeout=5)
+        except (OSError, subprocess.TimeoutExpired):
+            return "Memory usage unavailable."
         return result.stdout[:1000]
     return "Memory usage unavailable on this platform."
 
