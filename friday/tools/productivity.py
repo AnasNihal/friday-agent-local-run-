@@ -11,8 +11,11 @@ def _notes() -> Path:
 
 
 def create_note(text: str) -> str:
-    filename = _notes() / f"{datetime.now():%Y%m%d-%H%M%S}.txt"
-    filename.write_text(text.strip() + "\n")
+    content = text.strip()
+    if not content:
+        return "I couldn't save an empty note."
+    filename = _notes() / f"{datetime.now():%Y%m%d-%H%M%S-%f}.txt"
+    filename.write_text(content + "\n")
     return f"Note saved locally as {filename.name}."
 
 
