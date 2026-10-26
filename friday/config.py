@@ -11,6 +11,20 @@ def _bool(name: str, default: bool = False) -> bool:
     return os.getenv(name, str(default)).lower() in {"1", "true", "yes", "on"}
 
 
+def _positive_int(name: str, default: int) -> int:
+    """Read a positive integer setting with a useful error message."""
+    value = os.getenv(name)
+    if value is None:
+        return default
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be a positive integer") from exc
+    if parsed < 1:
+        raise ValueError(f"{name} must be a positive integer")
+    return parsed
+
+
 @dataclass(frozen=True)
 class Config:
     server_name: str = os.getenv("SERVER_NAME", "FRIDAY")
@@ -19,9 +33,9 @@ class Config:
     whisper_model: str = os.getenv("WHISPER_MODEL", "base.en")
     tts_provider: str = os.getenv("TTS_PROVIDER", "piper")
     tts_voice: str = os.getenv("TTS_VOICE", "en_US-lessac-medium")
-    mcp_server_port: int = int(os.getenv("MCP_SERVER_PORT", "8000"))
+    mcp_server_port: int = _positive_int("MCP_SERVER_PORT", 8000)
     world_monitor_url: str = os.getenv("WORLD_MONITOR_URL", "https://worldmonitor.app/")
-    max_tool_iterations: int = int(os.getenv("MAX_TOOL_ITERATIONS", "5"))
+    max_tool_iterations: int = _positive_int("MAX_TOOL_ITERATIONS", 5)
     memory_dir: str = os.getenv("FRIDAY_MEMORY_DIR", "memory")
     debug: bool = _bool("DEBUG")
     debug_tools: bool = _bool("DEBUG_TOOLS")
