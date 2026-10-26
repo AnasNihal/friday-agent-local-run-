@@ -16,10 +16,18 @@ def load_profile() -> dict:
     if not path.exists():
         return {"preferred_name": "", "favorite_apps": [], "preferences": {}}
     try:
-        return json.loads(path.read_text())
+        profile = json.loads(path.read_text())
+        if not isinstance(profile, dict):
+            return {"preferred_name": "", "favorite_apps": [], "preferences": {}}
+        return profile
     except (OSError, json.JSONDecodeError):
         return {"preferred_name": "", "favorite_apps": [], "preferences": {}}
 
 
 def save_profile(profile: dict) -> None:
-    _path().write_text(json.dumps(profile, indent=2) + "\n")
+    if not isinstance(profile, dict):
+        raise TypeError("profile must be a dictionary")
+    path = _path()
+    temporary = path.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps(profile, indent=2) + "\n")
+    temporary.replace(path)
