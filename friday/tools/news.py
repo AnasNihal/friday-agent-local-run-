@@ -21,6 +21,7 @@ import httpx
 from friday.config import config
 
 logger = logging.getLogger("friday.tools")
+MAX_FEED_BYTES = 2 * 1024 * 1024
 
 WORLD_NEWS_FEEDS = (
     ("BBC World", "https://feeds.bbci.co.uk/news/world/rss.xml"),
@@ -75,9 +76,14 @@ def parse_feed(content: bytes, source: str) -> list[dict[str, Any]]:
 
 def _fetch_feed(source: str, url: str) -> tuple[str, list[dict[str, Any]], str | None]:
     try:
-        response = httpx.get(url, headers={"User-Agent": "FRIDAY-local/1.0"}, timeout=10, follow_redirects=True)
-        response.raise_for_status()
-        return source, parse_feed(response.content, source), None
+        content = bytearray()
+        with httpx.stream("GET", url, headers={"User-Agent": "FRIDAY-local/1.0"}, timeout=10, follow_redirects=True) as response:
+            response.raise_for_status()
+            for chunk in response.iter_bytes(64 * 1024):
+                content.extend(chunk)
+                if len(content) > MAX_FEED_BYTES:
+                    raise ValueError("feed exceeds the 2 MiB size limit")
+        return source, parse_feed(bytes(content), source), None
     except Exception as exc:
         logger.warning("News source unavailable: %s (%s)", source, exc)
         return source, [], str(exc)
