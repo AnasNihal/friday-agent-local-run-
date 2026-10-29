@@ -96,8 +96,8 @@ def _deduplicate(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def get_world_news(max_results: int = 8) -> dict[str, Any]:
     """Retrieve current world headlines from multiple public RSS feeds."""
-    if not isinstance(max_results, int):
-        return {"success": False, "message": "max_results must be an integer", "headlines": [], "sources": []}
+    if not isinstance(max_results, int) or isinstance(max_results, bool) or not 1 <= max_results <= 20:
+        return {"success": False, "message": "max_results must be an integer from 1 to 20", "headlines": [], "sources": []}
     articles: list[dict[str, Any]] = []
     sources: list[dict[str, Any]] = []
     with ThreadPoolExecutor(max_workers=len(WORLD_NEWS_FEEDS)) as executor:
@@ -106,7 +106,7 @@ def get_world_news(max_results: int = 8) -> dict[str, Any]:
             source, entries, error = future.result()
             sources.append({"source": source, "success": not error, "count": len(entries), **({"error": error} if error else {})})
             articles.extend(entries)
-    headlines = _deduplicate(articles)[: max(1, min(max_results, 20))]
+    headlines = _deduplicate(articles)[:max_results]
     return {
         "success": bool(headlines),
         "message": f"Retrieved {len(headlines)} live headlines" if headlines else "Current news could not be retrieved.",
@@ -117,11 +117,14 @@ def get_world_news(max_results: int = 8) -> dict[str, Any]:
 
 def search_web(query: str, max_results: int = 6) -> dict[str, Any]:
     """Search public Google News RSS results without scraping Google HTML."""
-    if not isinstance(max_results, int):
-        return {"success": False, "query": query, "results": [], "error": "max_results must be an integer"}
+    if not isinstance(max_results, int) or isinstance(max_results, bool) or not 1 <= max_results <= 20:
+        return {"success": False, "query": query, "results": [], "error": "max_results must be an integer from 1 to 20"}
+    query = query.strip()[:500]
+    if not query:
+        return {"success": False, "query": query, "results": [], "error": "query must not be empty"}
     encoded = quote_plus(query.strip())
     source, entries, error = _fetch_feed("Google News", f"https://news.google.com/rss/search?q={encoded}&hl=en-US&gl=US&ceid=US:en")
-    results = _deduplicate(entries)[: max(1, min(max_results, 20))]
+    results = _deduplicate(entries)[:max_results]
     return {"success": bool(results), "query": query, "results": results, **({"error": error} if error else {})}
 
 
