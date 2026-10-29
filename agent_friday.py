@@ -62,6 +62,16 @@ TOOL_FUNCTIONS = {
     "get_disk_usage": get_disk_usage,
 }
 
+MAX_CONVERSATION_TURNS = 12
+
+
+def _trim_history(messages: list[dict], max_turns: int = MAX_CONVERSATION_TURNS) -> None:
+    """Keep the system prompt and the newest complete user-turn groups."""
+    user_positions = [index for index, item in enumerate(messages) if item.get("role") == "user"]
+    if len(user_positions) <= max_turns:
+        return
+    del messages[user_positions[-max_turns - 1]:user_positions[-max_turns]]
+
 
 def build_stt():
     """Build the local Whisper adapter without loading it until first use."""
@@ -147,6 +157,7 @@ def _tool_route(text: str) -> tuple[str, str] | None:
 def _friday_response(text: str, messages: list[dict[str, str]]) -> str:
     if config.debug_tools:
         logger.info("[AGENT] User: %s", text)
+    _trim_history(messages)
     messages.append({"role": "user", "content": text})
     try:
         message = chat_message(messages, tools=TOOL_DEFINITIONS)
