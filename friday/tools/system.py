@@ -69,12 +69,19 @@ def get_memory_usage() -> str:
 
 
 def get_disk_usage(path: str = "/") -> dict:
-    usage = shutil.disk_usage(path)
-    return {"path": path, "total_bytes": usage.total, "used_bytes": usage.used, "free_bytes": usage.free}
+    if not isinstance(path, str) or not path.strip():
+        return {"success": False, "message": "Provide a valid disk path."}
+    try:
+        usage = shutil.disk_usage(path)
+    except OSError as exc:
+        return {"success": False, "path": path, "message": f"Disk usage unavailable: {exc}"}
+    return {"success": True, "path": path, "total_bytes": usage.total, "used_bytes": usage.used, "free_bytes": usage.free}
 
 
 def get_current_time() -> str:
-    return datetime.datetime.now().astimezone().strftime("%A, %B %-d %Y at %-I:%M %p %Z")
+    now = datetime.datetime.now().astimezone()
+    day = now.strftime("%d").lstrip("0")
+    return f"{now.strftime('%A, %B')} {day} {now.strftime('%Y at %I:%M %p %Z')}"
 
 
 def register(mcp):
