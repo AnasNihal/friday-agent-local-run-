@@ -1,6 +1,8 @@
 """Read-only file awareness tools."""
 from pathlib import Path
 
+MAX_SEARCH_ENTRIES = 5_000
+
 
 def list_directory(path: str = ".") -> list[str] | str:
     try:
@@ -13,14 +15,22 @@ def list_directory(path: str = ".") -> list[str] | str:
 
 
 def search_files(query: str, path: str = ".") -> list[str] | str:
-    query = query.strip()
+    query = query.strip()[:200]
     if not query:
         return "Please provide a file name or part of a file name to search for."
     try:
         root = Path(path).expanduser().resolve()
         if not root.is_dir():
             return f"I couldn't search that path: {root} is not a directory."
-        return [str(item) for item in root.rglob(f"*{query}*") if item.is_file()][:100]
+        matches = []
+        for index, item in enumerate(root.rglob("*")):
+            if index >= MAX_SEARCH_ENTRIES:
+                break
+            if item.is_file() and query.casefold() in item.name.casefold():
+                matches.append(str(item))
+                if len(matches) == 100:
+                    break
+        return matches
     except OSError as exc:
         return f"I couldn't search that path: {exc}"
 
