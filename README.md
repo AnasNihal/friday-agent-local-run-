@@ -17,6 +17,7 @@ FRIDAY is a privacy-first macOS assistant built around [Ollama](https://ollama.c
 - [Run the Working MVP](#run-the-working-mvp)
 - [Local Speech-to-Text](#local-speech-to-text)
 - [World Intelligence](#world-intelligence)
+- [Project Progress](#project-progress)
 - [Safety](#safety)
 - [Configuration](#configuration)
 - [License](#license)
@@ -171,6 +172,20 @@ DEBUG_TOOLS=true uv run agent_friday.py console
 ```
 
 The tool-call loop is capped by `MAX_TOOL_ITERATIONS` (default `5`) and supports chained sequences such as `get_world_news` → `open_world_monitor` → final briefing.
+
+## Project Progress
+
+The current MVP supports local Ollama chat, explicit local notes, macOS system and application tools, local Whisper voice input, an MCP server, and RSS-based live news. Recent reliability work validates configuration and model responses, bounds retained conversation history and local file/news reads, and makes tool failures easier to report safely.
+
+Suggested next upgrades, in order:
+
+1. Add an automated verification workflow for the existing tool, news, Ollama, and speech tests.
+2. Add configurable text-to-speech playback so voice mode can speak responses.
+3. Add conversational memory controls, including a user-visible way to inspect and clear saved profile data.
+4. Improve speech detection with optional VAD and expose recording settings in configuration.
+5. Add structured health diagnostics for the local model, microphone, MCP server, and optional voice dependencies.
+
+The next release should keep local processing as the default and document any feature that requires network access or downloads a model.
 
 ## Safety
 
