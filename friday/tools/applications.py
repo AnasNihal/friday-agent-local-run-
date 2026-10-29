@@ -47,9 +47,9 @@ def close_application(name: str) -> str:
     cleaned = " ".join(name.strip().split())
     if not cleaned:
         return "Please provide an application name."
-    escaped = cleaned.replace("\\", "\\\\").replace('"', '\\"')
     try:
-        result = subprocess.run(["osascript", "-e", f'tell application "{escaped}" to quit'], capture_output=True, text=True, timeout=15)
+        script = "on run argv\n    tell application (item 1 of argv) to quit\nend run"
+        result = subprocess.run(["osascript", "-e", script, cleaned], capture_output=True, text=True, timeout=15)
     except (OSError, subprocess.TimeoutExpired):
         return f"I couldn't close {cleaned}."
     return f"Closed {cleaned}." if result.returncode == 0 else f"I couldn't close {cleaned}."
