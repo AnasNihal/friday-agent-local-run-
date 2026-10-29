@@ -36,10 +36,12 @@ def search_files(query: str, path: str = ".") -> list[str] | str:
 
 
 def open_file(path: str, max_chars: int = 12000) -> str:
-    if max_chars < 0:
-        return "The maximum file preview length cannot be negative."
+    if not isinstance(max_chars, int) or isinstance(max_chars, bool) or max_chars < 0:
+        return "The maximum file preview length must be a non-negative integer."
+    max_chars = min(max_chars, 12_000)
     try:
-        return Path(path).expanduser().read_text(errors="replace")[:max_chars]
+        with Path(path).expanduser().open("r", encoding="utf-8", errors="replace") as stream:
+            return stream.read(max_chars)
     except OSError as exc:
         return f"I couldn't open that file: {exc}"
 
