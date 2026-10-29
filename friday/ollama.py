@@ -51,7 +51,8 @@ def chat_message(messages: Iterable[dict[str, Any]], *, tools: list[dict[str, An
             raise ValueError("Ollama returned no message object")
         if not isinstance(message.get("content", ""), str):
             raise ValueError("Ollama returned invalid message content")
-        if not isinstance(message.get("tool_calls", []), list):
+        tool_calls = message.get("tool_calls")
+        if tool_calls is not None and not isinstance(tool_calls, list):
             raise ValueError("Ollama returned invalid tool calls")
         return message
     except Exception as exc:
