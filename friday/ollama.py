@@ -45,7 +45,15 @@ def chat_message(messages: Iterable[dict[str, Any]], *, tools: list[dict[str, An
     try:
         response = httpx.post(f"{config.ollama_base_url}/api/chat", json=payload, timeout=180)
         response.raise_for_status()
-        return response.json()["message"]
+        body = response.json()
+        message = body.get("message") if isinstance(body, dict) else None
+        if not isinstance(message, dict):
+            raise ValueError("Ollama returned no message object")
+        if not isinstance(message.get("content", ""), str):
+            raise ValueError("Ollama returned invalid message content")
+        if not isinstance(message.get("tool_calls", []), list):
+            raise ValueError("Ollama returned invalid tool calls")
+        return message
     except Exception as exc:
         raise _error(exc) from exc
 
