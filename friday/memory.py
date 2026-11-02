@@ -56,3 +56,8 @@ def save_profile(profile: dict) -> None:
     temporary = path.with_suffix(".json.tmp")
     temporary.write_text(json.dumps(_normalize_profile(profile), indent=2) + "\n", encoding="utf-8")
     temporary.replace(path)
+
+
+def clear_profile() -> None:
+    """Reset saved profile fields while leaving local notes intact."""
+    save_profile(_default_profile())
