@@ -18,6 +18,7 @@ from dotenv import load_dotenv
 from friday.config import config
 from friday.ollama import OllamaError, chat, chat_message, check_ready
 from friday.stt import LocalSTT, STTError, microphone_status
+from friday.tts import TTSError, speak
 from friday.tools.applications import open_application
 from friday.tools.browser import open_world_monitor, search_browser, youtube_search, web_search
 from friday.tools.news import get_world_news, search_web
@@ -250,7 +251,8 @@ def run_voice_input() -> int:
 
     recorder = MicrophoneRecorder()
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-    print("\nVoice input ready. Speak naturally; press Ctrl-C to exit. TTS is disabled in this phase.\n")
+    speech_status = "speech output enabled" if config.tts_enabled else "speech output disabled (set TTS_ENABLED=true to enable)"
+    print(f"\nVoice input ready; {speech_status}. Speak naturally; press Ctrl-C to exit.\n")
     while True:
         try:
             audio, sample_rate = recorder.record_until_silence()
@@ -259,7 +261,13 @@ def run_voice_input() -> int:
                 print("I didn't catch that.\n")
                 continue
             print(f"\nYou: {text}")
-            print(f"FRIDAY: {_friday_response(text, messages)}\n")
+            response = _friday_response(text, messages)
+            print(f"FRIDAY: {response}\n")
+            if config.tts_enabled:
+                try:
+                    speak(response)
+                except TTSError as exc:
+                    print(f"TTS: {exc}\n")
         except STTError as exc:
             print(f"STT: {exc}\n")
         except (KeyboardInterrupt, EOFError):
