@@ -16,6 +16,7 @@ from typing import Callable
 from dotenv import load_dotenv
 
 from friday.config import config
+from friday.health import collect_health
 from friday.ollama import OllamaError, chat, chat_message, check_ready
 from friday.stt import LocalSTT, STTError, microphone_status
 from friday.tts import TTSError, speak
@@ -128,6 +129,16 @@ def voice_input_diagnostics(stt: LocalSTT) -> bool:
     ollama_ok, ollama_message = check_ready()
     print(("✓ " if ollama_ok else "✗ ") + ollama_message)
     return microphone_ok and whisper_ok and ollama_ok
+
+
+def run_doctor() -> int:
+    """Print optional service diagnostics without loading voice models."""
+    results = collect_health()
+    print("FRIDAY local health check")
+    for item in results:
+        marker = "✓" if item["status"] == "ready" else "!" if item["status"] == "optional" else "✗"
+        print(f"{marker} {item['name']}: {item['message']}")
+    return 0 if next(item for item in results if item["name"] == "Ollama")["status"] == "ready" else 1
 
 
 def _tool_route(text: str) -> tuple[str, str] | None:
@@ -277,12 +288,14 @@ def run_voice_input() -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run the local FRIDAY assistant")
-    parser.add_argument("mode", nargs="?", choices=("console", "voice-input", "dev"), default="console")
+    parser.add_argument("mode", nargs="?", choices=("console", "voice-input", "doctor", "dev"), default="console")
     args = parser.parse_args()
     if args.mode == "console":
         return run_console()
     if args.mode == "voice-input":
         return run_voice_input()
+    if args.mode == "doctor":
+        return run_doctor()
     print("Voice mode is the next local integration step. Use `uv run agent_friday.py console` for the working MVP.")
     print("Configure local Whisper/Piper first; no LiveKit or cloud credentials are required for console mode.")
     return 0
