@@ -24,10 +24,18 @@ class MicrophoneSettings:
     sample_rate: int = 16_000
     channels: int = 1
     block_duration: float = 0.064
-    silence_duration: float = 0.8
-    speech_timeout: float = 10.0
-    max_recording_duration: float = 20.0
-    energy_threshold: float = 0.012
+    silence_duration: float = config.mic_silence_duration
+    speech_timeout: float = config.mic_speech_timeout
+    max_recording_duration: float = config.mic_max_recording_duration
+    energy_threshold: float = config.mic_energy_threshold
+
+    def __post_init__(self) -> None:
+        if self.sample_rate < 1 or self.channels < 1:
+            raise ValueError("sample_rate and channels must be positive")
+        if min(self.block_duration, self.silence_duration, self.speech_timeout, self.max_recording_duration) <= 0:
+            raise ValueError("microphone durations must be positive")
+        if not 0 < self.energy_threshold <= 1:
+            raise ValueError("energy_threshold must be greater than 0 and at most 1")
 
 
 def microphone_status() -> tuple[bool, str]:
