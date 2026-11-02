@@ -157,8 +157,20 @@ class MicrophoneRecorder:
 class LocalSTT:
     """Lazy-loaded Faster-Whisper recognizer with a stable transcription API."""
 
-    def __init__(self, model_name: str | None = None) -> None:
+    def __init__(
+        self,
+        model_name: str | None = None,
+        *,
+        language: str | None = None,
+        device: str | None = None,
+        compute_type: str | None = None,
+    ) -> None:
         self.model_name = model_name or config.whisper_model
+        self.language = language or config.stt_language
+        self.device = device or config.stt_device
+        self.compute_type = compute_type or config.stt_compute_type
+        if not all((self.model_name, self.language, self.device, self.compute_type)):
+            raise ValueError("Whisper model, language, device, and compute type must be set")
         self._model: Any = None
 
     @property
@@ -169,7 +181,7 @@ class LocalSTT:
             except ImportError as exc:
                 raise STTError("Install local Whisper with: uv sync --extra voice") from exc
             try:
-                self._model = WhisperModel(self.model_name, device="cpu", compute_type="int8")
+                self._model = WhisperModel(self.model_name, device=self.device, compute_type=self.compute_type)
             except Exception as exc:
                 raise STTError(
                     f"Could not load Whisper model {self.model_name!r}. "
@@ -184,7 +196,7 @@ class LocalSTT:
         try:
             segments, _info = self.model.transcribe(
                 audio,
-                language="en",
+                language=self.language,
                 beam_size=1,
                 vad_filter=True,
                 condition_on_previous_text=False,
