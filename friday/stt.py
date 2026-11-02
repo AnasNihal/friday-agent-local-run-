@@ -14,6 +14,8 @@ from typing import Any
 
 from friday.config import config
 
+MAX_QUEUED_AUDIO_BLOCKS = 100
+
 
 class STTError(RuntimeError):
     """A user-actionable local STT or microphone error."""
@@ -79,14 +81,24 @@ class MicrophoneRecorder:
 
         settings = self.settings
         blocksize = max(1, int(settings.sample_rate * settings.block_duration))
-        chunks: queue.Queue[Any] = queue.Queue()
-        callback_error: list[BaseException] = []
+        chunks: queue.Queue[Any] = queue.Queue(maxsize=MAX_QUEUED_AUDIO_BLOCKS)
 
         def callback(indata, _frames, _time, status):
             if status:
                 # Dropouts are recoverable; recording still produces audio.
                 pass
-            chunks.put(indata[:, 0].copy())
+            try:
+                chunks.put_nowait(indata[:, 0].copy())
+            except queue.Full:
+                # Keep the callback non-blocking and retain the newest audio.
+                try:
+                    chunks.get_nowait()
+                except queue.Empty:
+                    pass
+                try:
+                    chunks.put_nowait(indata[:, 0].copy())
+                except queue.Full:
+                    pass
 
         try:
             with sd.InputStream(
