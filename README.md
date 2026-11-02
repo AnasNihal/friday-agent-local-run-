@@ -54,7 +54,7 @@ friday-agent-local-run/
 ├── scripts/             # Utility scripts (e.g. microphone test)
 ├── tests/               # Test suite
 │
-├── agent_friday.py      # Main entry point (console / voice-input modes)
+├── agent_friday.py      # Console, voice-input, diagnostics, and memory commands
 ├── server.py            # Standalone MCP tool server
 ├── main.py              # Application entry point
 │
@@ -113,6 +113,14 @@ uv run server.py
 
 It serves tools over local SSE on port `8000`.
 
+Run a local setup check at any time:
+
+```bash
+uv run agent_friday.py doctor
+```
+
+The check reports Ollama, microphone and speech dependencies, and whether the local MCP port is responding.
+
 ## Local Speech-to-Text
 
 Phase 2A adds microphone input via local Faster-Whisper. Voice adapters are optional so console mode stays fast and dependency-light:
@@ -135,7 +143,9 @@ uv run --extra voice python scripts/test_microphone.py
 uv run --extra voice agent_friday.py voice-input
 ```
 
-This records until a short silence, transcribes locally, and sends the text through the existing FRIDAY → Ollama → tool pipeline. Text responses are printed; TTS is intentionally not included in this phase. Press `Ctrl-C` to exit.
+This records until a short silence, transcribes locally, and sends the text through the existing FRIDAY → Ollama → tool pipeline. Responses are printed. To also speak them locally, install Piper and an ONNX voice model, set `PIPER_BIN` and `PIPER_MODEL`, then set `TTS_ENABLED=true`. Piper uses the model and output-file command-line options; playback uses the system audio player. Press `Ctrl-C` to exit.
+
+Microphone timing and Whisper runtime are configurable with `MIC_SILENCE_DURATION`, `MIC_SPEECH_TIMEOUT`, `MIC_MAX_RECORDING_DURATION`, `MIC_ENERGY_THRESHOLD`, `STT_LANGUAGE`, `STT_DEVICE`, and `STT_COMPUTE_TYPE` in `.env`.
 
 **Tool-call diagnostics:**
 
@@ -175,15 +185,13 @@ The tool-call loop is capped by `MAX_TOOL_ITERATIONS` (default `5`) and supports
 
 ## Project Progress
 
-The current MVP supports local Ollama chat, explicit local notes, macOS system and application tools, local Whisper voice input, an MCP server, and RSS-based live news. Recent reliability work validates configuration and model responses, bounds retained conversation history and local file/news reads, and makes tool failures easier to report safely.
+The current MVP supports local Ollama chat, explicit local notes, macOS system and application tools, local Whisper voice input, optional Piper speech output, an MCP server, and RSS-based live news. Recent reliability work validates configuration and model responses, bounds retained conversation history and local file/news reads, adds a local health report, and makes tool failures easier to report safely. Microphone settings can be tuned in `.env`; saved profile data can be inspected or reset with `memory-show` and `memory-clear`.
 
-Suggested next upgrades, in order:
+Suggested next upgrades:
 
 1. Add an automated verification workflow for the existing tool, news, Ollama, and speech tests.
-2. Add configurable text-to-speech playback so voice mode can speak responses.
-3. Add conversational memory controls, including a user-visible way to inspect and clear saved profile data.
-4. Improve speech detection with optional VAD and expose recording settings in configuration.
-5. Add structured health diagnostics for the local model, microphone, MCP server, and optional voice dependencies.
+2. Add optional voice activity detection for noisier microphone environments.
+3. Add health reporting for model and microphone details without requiring a live microphone session.
 
 The next release should keep local processing as the default and document any feature that requires network access or downloads a model.
 
@@ -200,6 +208,8 @@ FRIDAY's tools are read-only or reversible by default:
 ## Configuration
 
 Copy `.env.example` to `.env` to configure Ollama, Whisper, Piper, MCP, and the local memory directory.
+
+`uv run agent_friday.py memory-show` prints the saved profile. `uv run agent_friday.py memory-clear` asks for confirmation before resetting that profile; saved notes are kept. Speech output is opt-in and requires a locally installed Piper executable and model.
 
 > `nomic-embed-text` is intentionally not used in phase 1. Semantic memory can be added later without changing the core provider boundary.
 
