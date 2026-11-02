@@ -48,6 +48,14 @@ def _positive_float(name: str, default: float) -> float:
     return parsed
 
 
+def _unit_float(name: str, default: float) -> float:
+    """Read a positive decimal no greater than one."""
+    parsed = _positive_float(name, default)
+    if parsed > 1:
+        raise ValueError(f"{name} must be greater than 0 and at most 1")
+    return parsed
+
+
 @dataclass(frozen=True)
 class Config:
     server_name: str = os.getenv("SERVER_NAME", "FRIDAY")
@@ -64,7 +72,7 @@ class Config:
     mic_silence_duration: float = _positive_float("MIC_SILENCE_DURATION", 0.8)
     mic_speech_timeout: float = _positive_float("MIC_SPEECH_TIMEOUT", 10.0)
     mic_max_recording_duration: float = _positive_float("MIC_MAX_RECORDING_DURATION", 20.0)
-    mic_energy_threshold: float = _positive_float("MIC_ENERGY_THRESHOLD", 0.012)
+    mic_energy_threshold: float = _unit_float("MIC_ENERGY_THRESHOLD", 0.012)
     mcp_server_port: int = _positive_int("MCP_SERVER_PORT", 8000)
     world_monitor_url: str = os.getenv("WORLD_MONITOR_URL", "https://worldmonitor.app/")
     max_tool_iterations: int = _positive_int("MAX_TOOL_ITERATIONS", 5)
