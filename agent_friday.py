@@ -17,6 +17,7 @@ from dotenv import load_dotenv
 
 from friday.config import config
 from friday.health import collect_health
+from friday.memory import clear_profile, load_profile
 from friday.ollama import OllamaError, chat, chat_message, check_ready
 from friday.stt import LocalSTT, STTError, microphone_status
 from friday.tts import TTSError, speak
@@ -139,6 +140,31 @@ def run_doctor() -> int:
         marker = "✓" if item["status"] == "ready" else "!" if item["status"] == "optional" else "✗"
         print(f"{marker} {item['name']}: {item['message']}")
     return 0 if next(item for item in results if item["name"] == "Ollama")["status"] == "ready" else 1
+
+
+def run_memory_show() -> int:
+    """Display the explicitly saved local profile as editable JSON."""
+    print(json.dumps(load_profile(), indent=2, ensure_ascii=False))
+    return 0
+
+
+def run_memory_clear() -> int:
+    """Reset profile fields after an interactive confirmation."""
+    try:
+        answer = input("Reset the saved FRIDAY profile? Local notes will be kept. [y/N] ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print("Profile reset cancelled.")
+        return 1
+    if answer not in {"y", "yes"}:
+        print("Profile reset cancelled.")
+        return 0
+    try:
+        clear_profile()
+    except OSError as exc:
+        print(f"Could not reset the saved profile: {exc}")
+        return 1
+    print("Saved profile reset. Local notes were kept.")
+    return 0
 
 
 def _tool_route(text: str) -> tuple[str, str] | None:
@@ -288,7 +314,7 @@ def run_voice_input() -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run the local FRIDAY assistant")
-    parser.add_argument("mode", nargs="?", choices=("console", "voice-input", "doctor", "dev"), default="console")
+    parser.add_argument("mode", nargs="?", choices=("console", "voice-input", "doctor", "memory-show", "memory-clear", "dev"), default="console")
     args = parser.parse_args()
     if args.mode == "console":
         return run_console()
@@ -296,6 +322,10 @@ def main() -> int:
         return run_voice_input()
     if args.mode == "doctor":
         return run_doctor()
+    if args.mode == "memory-show":
+        return run_memory_show()
+    if args.mode == "memory-clear":
+        return run_memory_clear()
     print("Voice mode is the next local integration step. Use `uv run agent_friday.py console` for the working MVP.")
     print("Configure local Whisper/Piper first; no LiveKit or cloud credentials are required for console mode.")
     return 0
