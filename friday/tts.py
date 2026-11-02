@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import platform
+import os
 import shutil
 import subprocess
 import tempfile
@@ -24,7 +25,7 @@ def synthesize(text: str, output_path: str | Path) -> Path:
     if len(text) > MAX_SPEECH_CHARACTERS:
         raise TTSError(f"Speech is limited to {MAX_SPEECH_CHARACTERS} characters.")
 
-    binary = shutil.which(__import__("os").getenv("PIPER_BIN", "piper"))
+    binary = shutil.which(os.getenv("PIPER_BIN", "piper"))
     if not binary:
         raise TTSError("Piper is unavailable. Install it or set PIPER_BIN.")
     model = Path(config.piper_model).expanduser()
@@ -47,3 +48,34 @@ def synthesize(text: str, output_path: str | Path) -> Path:
         detail = result.stderr.strip()[:300]
         raise TTSError("Piper did not create an audio file." + (f" {detail}" if detail else ""))
     return destination
+
+
+def _play_audio(path: Path) -> None:
+    """Play a generated WAV file with an operating-system audio utility."""
+    system = platform.system()
+    if system == "Windows":
+        try:
+            import winsound
+
+            winsound.PlaySound(str(path), winsound.SND_FILENAME)
+            return
+        except Exception as exc:
+            raise TTSError(f"Could not play speech audio: {exc}") from exc
+
+    candidates = {"Darwin": ("afplay",), "Linux": ("paplay", "aplay")}.get(system, ())
+    player = next((shutil.which(candidate) for candidate in candidates if shutil.which(candidate)), None)
+    if not player:
+        raise TTSError(f"No supported audio player was found for {system}.")
+    try:
+        result = subprocess.run([player, str(path)], capture_output=True, text=True, timeout=120, check=False)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise TTSError(f"Could not play speech audio: {exc}") from exc
+    if result.returncode != 0:
+        raise TTSError("The system audio player could not play the response.")
+
+
+def speak(text: str) -> None:
+    """Synthesize and play a response, cleaning up the temporary WAV afterward."""
+    with tempfile.TemporaryDirectory(prefix="friday-tts-") as temporary_directory:
+        audio_path = Path(temporary_directory) / "response.wav"
+        _play_audio(synthesize(text, audio_path))
